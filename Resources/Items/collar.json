@@ -1,0 +1,14 @@
+[
+    {"func":"CasLibModelFormatVersion","version":1},
+    {"func":"AddComponent","type":"Item"},
+    {"func":"SetComponentField","type":"Item","field":"id","value":"duffelbag"},
+    {"func":"SetFieldParent","type":"Item","parent":"container"},
+    {"func":"SetField","field":"enabled","value":true},
+    {"func":"SetField","field":"maxWeight","value":10.0},
+    {"func":"AddComponent","type":"UnityEngine.SpriteRenderer"},
+    {"func":"Construct","type":"UnityEngine.Sprite","constructionID":1,"op":"LoadSprite","src":"Items/collar.png"},
+    {"func":"SetComponentField","type":"UnityEngine.SpriteRenderer","field":"sprite","value":{
+        "constructionID":1
+    }},
+    {"func":"ResetFieldParent"}
+]
