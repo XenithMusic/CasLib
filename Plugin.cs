@@ -4,20 +4,24 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace CasLib;
 
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
 public class Plugin : BaseUnityPlugin
 {
+    public static Plugin instance;
     public static bool LOADED = false;
     public static bool CAN_LOAD = true;
     public static new ManualLogSource Logger;
     public static Harmony harmony;
     public static CasLibRegistries REGISTRIES;
+    public static System.Random globrng = new System.Random();
         
     private void Awake()
     {
+        instance = this;
         // Plugin startup logic
         Logger = base.Logger;
         Logger.LogInfo($"Library {MyPluginInfo.PLUGIN_GUID} loading!");
@@ -61,10 +65,11 @@ public class Plugin : BaseUnityPlugin
         },(string id) => {
             GameObject go = (GameObject)Resources.Load("duffelbag");
             if (go.GetComponent<Item>() == null) go.AddComponent<Item>();
+            go.GetComponent<Item>().id = id;
+            go.GetComponent<Item>().name = id;
             go.AddComponent<Container>();
             go.GetComponent<Container>().maxWeight = 50;
             return go;
         }));
-        // TODO: make library (CasLib) for plugin loading)
     }
 }

@@ -7,6 +7,7 @@ namespace CasLib
     public class CasLibItem
     {
         public ItemInfo vanillaItem;
+        private readonly int debugId = UnityEngine.Random.Range(0, int.MaxValue);
         public string id;
         /// <summary>
         /// A function that should generate a GameObject for this item, and return it.
@@ -16,14 +17,42 @@ namespace CasLib
         /// </code>
         /// </summary>
         public Func<string,GameObject> assetLoader;
-        public GameObject referenceObject = null;
+        public class DeathWitness : MonoBehaviour
+        {
+            private void OnDestroy()
+            {
+                Debug.LogError(
+                    $"DESTROYED: {gameObject.name}\n" +
+                    Environment.StackTrace
+                );
+            }
+            private void OnDisable()
+            {
+                Debug.LogWarning(
+                    $"DISABLED: {gameObject.name}\n" +
+                    Environment.StackTrace
+                );
+            }
+        }
         public GameObject LoadAsset()
         {
-            GameObject go = GameObject.Instantiate(assetLoader(id));
+            GameObject go = assetLoader(id);
+            go.transform.position = new Vector3(100000,100000,100000);
             if (go == null) Plugin.Logger.LogWarning("it's null in the loadasset somehow??");
             Item item = go.GetComponent<Item>();
             item.id = id;
             item.name = id;
+
+            // HACK: prevent 1 error per frame per item in the main
+            //       menu due to KrokMP not checking if there's a world
+            //       in their patch. this is quite possibly my fault,
+            //       (possibly related to me faking prefabs for easy
+            //       development) but i have not found any other
+            //       fix/workaround.
+            //
+            //       and no, ignoring the errors is not an option, with
+            //       17 items, this bug causes a framerate of 7 fps.
+            go.SetActive(WorldGeneration.world != null && WorldGeneration.world.worldExists);
             return go;
         }
         /// <summary>
@@ -40,11 +69,6 @@ namespace CasLib
             {
                 this.vanillaItem.rotSpeed = 1.666f / this.vanillaItem.decayMinutes;
             }
-            // nolonger copied from vanilla code
-            Plugin.Logger.LogInfo("loadingAsset");
-            this.referenceObject = this.LoadAsset();
-            Plugin.Logger.LogInfo("loadedAsset");
-            if (this.referenceObject == null) Plugin.Logger.LogWarning("referenceObject is null"); 
         }
         /// <param name="id">The ID for the item.</param>
         /// <param name="vanillaItem">The ItemInfo that should be passed to Casualties: Unknown</param>
@@ -54,8 +78,6 @@ namespace CasLib
             this.id = id;
             this.vanillaItem = vanillaItem;
             this.assetLoader = assetLoader;
-            InitializeItemCharacteristics();
-            if (this.referenceObject == null) Plugin.Logger.LogWarning("referenceObject is NOW null");
         }
     }
 }

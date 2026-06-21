@@ -4,7 +4,9 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using HarmonyLib;
+using KrokoshaCasualtiesMP;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace CasLib
 {
@@ -20,26 +22,66 @@ namespace CasLib
                 pool.Add(item.vanillaItem.category, new List<string>());
             }
             pool[item.vanillaItem.category].Add(item.id);
-            if (item.referenceObject == null) Plugin.Logger.LogWarning("it is null in the lootpool");
         }
         public static void AddItemInternal(CasLibItem item)
         {
+            item.InitializeItemCharacteristics();
             Item.GlobalItems.Add(item.id,item.vanillaItem);
-            if (item.referenceObject == null) Plugin.Logger.LogWarning("it is null in the internal adder");
+            AddToLootPool(item);
         }
     }
     public class CasLibRegistries
     {
         public Dictionary<string,CasLibItem> items;
+        public Dictionary<string,Func<float,Body,bool>> hooksFootStep;
+        public Dictionary<string,Func<Collision2D,Body,bool>> hooksCollision;
+        public Dictionary<string,AudioClip> audioClips;
         public CasLibRegistries()
         {
             items = new Dictionary<string,CasLibItem>();
+            hooksFootStep = new Dictionary<string,Func<float,Body,bool>>();
+            hooksCollision = new Dictionary<string,Func<Collision2D,Body,bool>>();
+            audioClips = new Dictionary<string,AudioClip>();
         }
         public void RegisterItem(CasLibItem item)
         {
             Plugin.Logger.LogInfo($"Registering CasLibItem {item.id}...");
             items.Add(item.id,item);
-            if (item.referenceObject == null) Plugin.Logger.LogWarning("it is null when i register it");
+        }
+        public void RegisterAudioClip(string id, AudioClip audio)
+        {
+            Plugin.Logger.LogInfo($"Registering AudioClip {id}...");
+            audioClips.Add(id,audio);
+        }
+        /// <summary>
+        /// Registers a function to run on footstep.
+        /// </summary>
+        /// <param name="id">
+        /// An identifier to refer to this hook.
+        /// </param>
+        /// <param name="hook">
+        /// Function that takes in two parameters (a float representing the volume of the footstep, and a Body representing the Body instance.)
+        /// This function should return a bool, which is `true` if the vanilla code should run.
+        /// </param>
+        public void RegisterHookFootStep(string id, Func<float,Body,bool> hook)
+        {
+            Plugin.Logger.LogInfo($"Registering Footstep Hook {id}");
+            hooksFootStep.Add(id,hook);
+        }
+        /// <summary>
+        /// Registers a function to run on collision (prefix).
+        /// </summary>
+        /// <param name="id">
+        /// An identifier to refer to this hook.
+        /// </param>
+        /// <param name="hook">
+        /// Function that takes in two parameters (a Collision2D representing the collision, and a Body representing the Body instance.)
+        /// This function should return a bool, which is `true` if the vanilla code should run.
+        /// </param>
+        public void RegisterHookCollision(string id, Func<Collision2D,Body,bool> hook)
+        {
+            Plugin.Logger.LogInfo($"Registering Footstep Hook {id}");
+            hooksCollision.Add(id,hook);
         }
     }
     [HarmonyPatch(typeof(ItemLootPool),nameof(ItemLootPool.InitializePool))]
@@ -50,9 +92,7 @@ namespace CasLib
             Plugin.Logger.LogMessage("CasLib Registry updating loot pool!");
             foreach (CasLibItem item in Plugin.REGISTRIES.items.Values)
             {
-                if (item.referenceObject == null) Plugin.Logger.LogWarning("null before itemlootpool");
                 CasLibItemPool.AddToLootPool(item);
-                if (item.referenceObject == null) Plugin.Logger.LogWarning("null after itemlootpool");
             }
         }
     }
@@ -61,12 +101,10 @@ namespace CasLib
     {
         public static void Postfix()
         {
-            Plugin.Logger.LogMessage("CasLib Registry updating global items!");
+            Plugin.Logger.LogMessage("CasLib Registry updating global items; it is nolonger safe to update the registry!");
             foreach(CasLibItem item in Plugin.REGISTRIES.items.Values)
             {
-                if (item.referenceObject == null) Plugin.Logger.LogWarning("null before additeminternal");
                 CasLibItemPool.AddItemInternal(item);
-                if (item.referenceObject == null) Plugin.Logger.LogWarning("null after additeminternal");
             }
         }
     }
@@ -82,7 +120,7 @@ namespace CasLib
         {
             if (Plugin.REGISTRIES.items.ContainsKey(path))
             {
-                __result = Plugin.REGISTRIES.items[path].referenceObject;
+                __result = Plugin.REGISTRIES.items[path].LoadAsset();
                 return false;
             }
             return true;
@@ -94,24 +132,51 @@ namespace CasLib
     {
         public static void Postfix(string path,ref UnityEngine.Object[] __result)
         {
-            Plugin.Logger.LogInfo(
-                $"Object LoadAll hit: {path}, length={__result.Length}"
-            );
+            // Plugin.Logger.LogInfo(
+            //     $"Object LoadAll hit: {path}, length={__result.Length}, scene={SceneManager.GetActiveScene().GetHashCode()}"
+            // );
             if (path == "") {
                 int oldlen = __result.Length;
                 List<UnityEngine.Object> list = __result.ToList();
-                Plugin.Logger.LogInfo("Path is empty string, registry should be appended!");
-                if (Plugin.REGISTRIES.items["collar"].referenceObject == null) Plugin.Logger.LogWarning("it is null in the registry");
+                // Plugin.Logger.LogInfo("Path is empty string, registry should be appended!");
                 foreach (CasLibItem item in Plugin.REGISTRIES.items.Values)
                 {
-                    if (item.referenceObject == null) Plugin.Logger.LogWarning("item.referenceObject == null before i add it to the list");
-                    list.Add(item.referenceObject);
-                    if (item == null) Plugin.Logger.LogWarning("item == null");
-                    if (item.referenceObject == null) Plugin.Logger.LogWarning("item.referenceObject == null");
+                    Plugin.Logger.LogInfo($"id={item.GetHashCode()}");
+                    list.Add(item.LoadAsset());
                 }
                 __result = list.ToArray();
-                Plugin.Logger.LogInfo($"Loaded all! (length {oldlen} => {__result.Length}, expected (length {oldlen} => {oldlen + Plugin.REGISTRIES.items.Count}))");
+                // Plugin.Logger.LogInfo($"Loaded all! (length {oldlen} => {__result.Length}, expected (length {oldlen} => {oldlen + Plugin.REGISTRIES.items.Count}))");
             }
+        }
+    }
+    [HarmonyPatch(typeof(Body),nameof(Body.FootStep))]
+    public class FootStepHooksPatch
+    {
+        public static bool Prefix(float vol, ref Body __instance)
+        {
+            foreach (Func<float,Body,bool> func in Plugin.REGISTRIES.hooksFootStep.Values)
+            {
+                if (func == null) continue;
+                if (func(vol,__instance) == true) return false;
+            }
+            return true;
+        }
+    }
+    [HarmonyPatch(typeof(Sound))]
+    [HarmonyPatch(nameof(Sound.Play),[typeof(string),typeof(Vector2),typeof(bool),typeof(bool),typeof(Transform),typeof(float),typeof(float),typeof(bool),typeof(bool)])]
+    public class PlaySoundFromStringPatch
+    {
+        public static bool Prefix(string clip, Vector2 pos, bool twoDimensional, bool pitchShift, Transform follow, float volume, float pitch, bool noReverb, bool ignoreMixer,ref AudioSource __result)
+        {
+            if (clip == null) return true;
+            if (Plugin.REGISTRIES.audioClips.ContainsKey(clip))
+            {
+                // Plugin.Logger.LogInfo($"Playing audioclip! ({clip}={Plugin.REGISTRIES.audioClips[clip]})");
+                __result = Sound.Play(Plugin.REGISTRIES.audioClips[clip],pos,twoDimensional,pitchShift,follow,volume,pitch,noReverb,ignoreMixer);
+                return false;
+            }
+            // Plugin.Logger.LogInfo($"Not my audioclip! ({clip} not in {string.Join(", ",Plugin.REGISTRIES.audioClips.Keys)})");
+            return true;
         }
     }
 }

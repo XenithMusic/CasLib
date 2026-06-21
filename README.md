@@ -31,5 +31,23 @@ After you've added the library files, run `./build` with the source directory op
 
 Once the mod is built, create a folder in your BepInEx plugins folder, called `CasLib`. Place the contents of `bin/Debug/netstandard2.1` into this folder.
 
-# Significant Bugs
-- For some god-forsaken reason, after a while registered items lose their associated object.
+# Known Bugs
+- `LoadSprite` seems to add a weird ass fucking outline for seemingly no reason??
+- NullReferenceException during LoadAsset.
+
+# Bug Stack Traces
+### 1
+```
+[Error  : Unity Log] NullReferenceException: Object reference not set to an instance of an object
+Stack trace:
+CasLib.CasLibItem.LoadAsset () (at /home/cookii/Desktop/software/Mods/CasualtiesUnknown/CasLib/Item.cs:45)
+CasLib.UnityResourcesLoadAllPatch.Postfix (System.String path, UnityEngine.Object[]& __result) (at /home/cookii/Desktop/software/Mods/CasualtiesUnknown/CasLib/Registries.cs:103)
+(wrapper dynamic-method) UnityEngine.Resources.DMD<UnityEngine.Resources::LoadAll>(string,System.Type)
+UnityEngine.Resources.LoadAll[T] (System.String path) (at <c39a522eee05469b8171a6cfeb646c59>:0)
+CollaredCasualties.Plugin.DoActualLoad () (at /home/cookii/Desktop/software/Mods/CasualtiesUnknown/CollaredCasualties/Plugin.cs:136)
+CollaredCasualties.Plugin.Awake () (at /home/cookii/Desktop/software/Mods/CasualtiesUnknown/CollaredCasualties/Plugin.cs:35)
+UnityEngine.GameObject:AddComponent(Type)
+BepInEx.Bootstrap.Chainloader:Start()
+UnityEngine.Application:.cctor()
+Unity.MemoryProfiler.MetadataInjector:PlayerInitMetadata()
+```

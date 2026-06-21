@@ -6,6 +6,7 @@ using HarmonyLib;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.Runtime.CompilerServices;
+using UnityEngine.Networking;
 
 namespace CasLib
 {
@@ -51,6 +52,7 @@ namespace CasLib
                 CasLibPrefabLoader.expectedVersion = (long)args.GetValueOrDefault("version",0);
             } else if (op == "AddComponent")
             {
+                if (((GameObject)CasLibPrefabLoader.constructedObjects[0]).GetComponent(Type.GetType((string)args["type"]))) return;
                 ((GameObject)CasLibPrefabLoader.constructedObjects[0]).AddComponent(Type.GetType((string)args["type"]));
             } else if (op == "SetComponentField")
             {
@@ -99,36 +101,64 @@ namespace CasLib
         public static List<object> constructedObjects = null;
         public static object FieldParent = null;
         public static string PluginFolder = "CasLib";
+        public static string ParseRelativePath(string pluginfolder, string path)
+        {
+            return Path.Combine(BepInEx.Paths.PluginPath,pluginfolder,"Resources",path);
+        }
         public static string ParseRelativePath(string path)
         {
-            return Path.Combine(BepInEx.Paths.PluginPath,CasLibPrefabLoader.PluginFolder,"Resources",path);
+            return ParseRelativePath(CasLibPrefabLoader.PluginFolder,path);
         }
-        public static Texture2D LoadTexture(string path)
+        public static IEnumerator<UnityEngine.Networking.UnityWebRequestAsyncOperation> LoadAudioClipCoroutine(string pluginfolder, string path, bool stream)
         {
-            Texture2D tex = new Texture2D(2,2);
-            tex.LoadRawTextureData(File.ReadAllBytes(ParseRelativePath(path)));
+            string abspath = ParseRelativePath(pluginfolder,path);
+            Plugin.Logger.LogInfo("start request");
+            UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip("file://" + abspath,AudioType.OGGVORBIS);
+            Plugin.Logger.LogInfo("waiting for request to finish");
+            yield return request.SendWebRequest();
+            Plugin.Logger.LogInfo("it finished");
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Plugin.Logger.LogError($"Failed to get audio clip! Path: '{"file://" + abspath}', Error: {request.error}");
+                yield break;
+            }
+            Plugin.Logger.LogInfo("getting audio clip");
+            AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
+            
+            Plugin.Logger.LogInfo("registering audio clip");
+            Plugin.REGISTRIES.RegisterAudioClip(Path.GetFileNameWithoutExtension(abspath),clip);
+        }
+        public static Texture2D LoadTexture(string pluginfolder, string path, Vector2Int texSize)
+        {
+            CasLibPrefabLoader.PluginFolder = pluginfolder;
+            Texture2D tex = new Texture2D(texSize.x,texSize.y);
+            tex.LoadImage(File.ReadAllBytes(ParseRelativePath(path)));
+            tex.filterMode = FilterMode.Point;
+            tex.wrapMode = TextureWrapMode.Clamp;
             return tex;
         }
-        public static Sprite LoadSprite(string path)
+        public static Sprite LoadSprite(string pluginfolder, string path, Vector2Int texSize, Rect rect, Vector2 pivot, float pxpu)
         {
-            Texture2D tex = LoadTexture(path);
-            return LoadSprite(tex,new Rect(0,0,tex.width,tex.height),new Vector2(0,0));
+            Texture2D tex = LoadTexture(pluginfolder,path,texSize);
+            return LoadSprite(tex,rect,pivot,pxpu);
         }
-        public static Sprite LoadSprite(string path, Rect rect, Vector2 pivot)
+        public static Sprite LoadSprite(Texture2D tex, Rect rect, Vector2 pivot, float pxpu)
         {
-            Texture2D tex = LoadTexture(path);
-            return LoadSprite(tex,rect,pivot);
-        }
-        public static Sprite LoadSprite(Texture2D tex, Rect rect, Vector2 pivot)
-        {
-            Sprite sprite = Sprite.Create(tex,rect,pivot);
+            Sprite sprite = Sprite.Create(tex,rect,pivot,pxpu);
             return sprite;
         }
         public static void Construct(Dictionary<string,object> args)
         {
             if ((string)args["op"] == "LoadSprite")
             {
-                constructedObjects.Add(LoadSprite((string)args["src"]));
+                constructedObjects.Add(LoadSprite(
+                    CasLibPrefabLoader.PluginFolder,
+                    (string)args["src"],
+                    new Vector2Int((int)(long)args["txwidth"],(int)(long)args["txheight"]),
+                    new Rect(0,0,(int)(long)args["txwidth"],(int)(long)args["txheight"]),
+                    new Vector2(0,0),
+                    (float)(double)args["pxpu"]
+                ));
             } else if ((string)args["op"] == "LoadSpriteRP")
             {
                 // TODO: implement LoadSprite(path,rect,pivot)
@@ -156,7 +186,9 @@ namespace CasLib
         }
         public static GameObject LoadPrefab(string PluginFolder, string path)
         {
-            return LoadPrefab(new GameObject(), PluginFolder, path);
+            GameObject go = new GameObject();
+            go.SetActive(false);
+            return LoadPrefab(go, PluginFolder, path);
         }
     }
 }
