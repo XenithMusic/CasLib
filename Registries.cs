@@ -32,16 +32,25 @@ namespace CasLib
     }
     public class CasLibRegistries
     {
+        public List<Setting> settings;
         public Dictionary<string,CasLibItem> items;
         public Dictionary<string,Func<float,Body,bool>> hooksFootStep;
         public Dictionary<string,Func<Collision2D,Body,bool>> hooksCollision;
         public Dictionary<string,AudioClip> audioClips;
+        public Dictionary<string,Command> commands;
         public CasLibRegistries()
         {
+            settings = new List<Setting>();
             items = new Dictionary<string,CasLibItem>();
             hooksFootStep = new Dictionary<string,Func<float,Body,bool>>();
             hooksCollision = new Dictionary<string,Func<Collision2D,Body,bool>>();
             audioClips = new Dictionary<string,AudioClip>();
+            commands = new Dictionary<string,Command>();
+        }
+        public void RegisterSetting(Setting setting)
+        {
+            Plugin.Logger.LogInfo($"Registering Setting {setting.name}...");
+            settings.Add(setting);
         }
         public void RegisterItem(CasLibItem item)
         {
@@ -82,6 +91,16 @@ namespace CasLib
         {
             Plugin.Logger.LogInfo($"Registering Footstep Hook {id}");
             hooksCollision.Add(id,hook);
+        }
+        public void RegisterCommand(Command command)
+        {
+            Plugin.Logger.LogInfo($"Registering Command {command.name}...");
+            commands.Add(command.name,command);
+        }
+
+        public AudioClip GetRegisteredAudioClip(string id)
+        {
+            return audioClips[id];
         }
     }
     [HarmonyPatch(typeof(ItemLootPool),nameof(ItemLootPool.InitializePool))]
@@ -177,6 +196,28 @@ namespace CasLib
             }
             // Plugin.Logger.LogInfo($"Not my audioclip! ({clip} not in {string.Join(", ",Plugin.REGISTRIES.audioClips.Keys)})");
             return true;
+        }
+    }
+    [HarmonyPatch(typeof(ConsoleScript),nameof(ConsoleScript.RegisterAllCommands))]
+    public class RegisterCommandsPatch
+    {
+        public static void Postfix()
+        {
+            foreach (Command cmd in Plugin.REGISTRIES.commands.Values)
+            {
+                ConsoleScript.Commands.Add(cmd);
+            }
+        }
+    }
+    [HarmonyPatch(typeof(Settings),nameof(Settings.DefaultSettings))]
+    public class RegisterSettingsPatch
+    {
+        public static void Postfix(ref List<Setting> __result)
+        {
+            foreach(Setting setting in Plugin.REGISTRIES.settings)
+            {
+                __result.Add(setting);
+            }
         }
     }
 }
